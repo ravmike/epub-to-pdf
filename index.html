@@ -268,6 +268,22 @@ function toBlocks(html) {
   const div = document.createElement('div');
   div.innerHTML = m ? m[1] : html;
   const out = [];
+
+  function isChapterTitle(n) {
+    // Detect chapter titles: <p> consisting entirely of <strong> text
+    // Common in FB2→EPUB conversions: <p class="p"><strong>Глава 1. Title</strong></p>
+    if (n.children.length === 1 && n.children[0].tagName === 'STRONG') {
+      const t = n.textContent.trim();
+      if (t.length > 0 && t.length < 200) return true;
+    }
+    // Also detect explicit heading patterns in text
+    const t = n.textContent.trim();
+    if (/^(глава|chapter|часть|part|книга|book|раздел|section|пролог|эпилог|prologue|epilogue)\s/i.test(t)) {
+      if (t.length < 200) return true;
+    }
+    return false;
+  }
+
   (function walk(n) {
     if (n.nodeType === 3) { const t = n.textContent.replace(/\s+/g,' ').trim(); if (t) out.push({T:'t',text:t}); return; }
     if (n.nodeType !== 1) return;
@@ -277,7 +293,25 @@ function toBlocks(html) {
     if (tag==='br') { out.push({T:'br'}); return; }
     if (tag==='hr') { out.push({T:'hr'}); return; }
     if (tag==='img') { const s=n.getAttribute('src')||''; if(s.startsWith('data:image')) out.push({T:'img',src:s}); return; }
-    if (['p','div','blockquote','li','figcaption','td','th','dt','dd','address','pre','section','article'].includes(tag)) {
+    if (tag==='p') {
+      // Empty-line paragraph (FB2→EPUB pattern)
+      if (n.classList.contains('empty-line') || n.textContent.trim() === '') {
+        out.push({T:'br'});
+        return;
+      }
+      // Extract images first
+      n.querySelectorAll('img').forEach(i=>{ const s=i.getAttribute('src')||''; if(s.startsWith('data:image')) out.push({T:'img',src:s}); });
+      const t = n.textContent.trim();
+      if (!t) return;
+      // Chapter title detection
+      if (isChapterTitle(n)) {
+        out.push({T:'h', lv:1, text:t});
+        return;
+      }
+      out.push({T:'p', text:t});
+      return;
+    }
+    if (['div','blockquote','li','figcaption','td','th','dt','dd','address','pre','section','article'].includes(tag)) {
       n.querySelectorAll('img').forEach(i=>{ const s=i.getAttribute('src')||''; if(s.startsWith('data:image')) out.push({T:'img',src:s}); });
       const t=n.textContent.trim();
       if(t) out.push({T:'p',text:(tag==='li'?'• ':'')+t});
@@ -337,15 +371,18 @@ async function handleFile(file) {
 
     let cy = mgn;
     const np = () => { doc.addPage([pw,ph]); cy=mgn; };
+    const indent = 7; // first-line indent in mm for paragraphs
+    const outlineItems = []; // for PDF outline/bookmarks
 
-    function wr(text, bold=false, fs=fSize, after=0) {
+    function wr(text, bold=false, fs=fSize, after=0, firstIndent=0) {
       doc.setFontSize(fs);
       doc.setFont('NotoSans', bold?'bold':'normal');
       const lhm = fs*pt2mm*lh;
-      const lines = doc.splitTextToSize(text, uw);
-      for (const l of lines) {
+      const lines = doc.splitTextToSize(text, uw - firstIndent);
+      for (let li=0; li<lines.length; li++) {
         if (cy+lhm > ph-mgn) np();
-        doc.text(l, mgn, cy);
+        const x = mgn + (li===0 ? firstIndent : 0);
+        doc.text(lines[li], x, cy);
         cy += lhm;
       }
       cy += after;
@@ -359,13 +396,18 @@ async function handleFile(file) {
 
       for (const b of blocks) {
         if (b.T==='h') {
-          const hs = Math.max(fSize, fSize+(4-b.lv)*1.5);
-          cy += lhm*0.4;
-          wr(b.text, true, hs, lhm*0.3);
+          // Chapter heading: new page (unless already at top), larger bold font
+          if (cy > mgn + lhm) np(); // start on fresh page if not already
+          const hs = Math.round(fSize * 1.5);
+          const hsLhm = hs*pt2mm*lh;
+          cy += hsLhm * 0.8; // top padding
+          // Record for outline
+          outlineItems.push({title: b.text, page: doc.internal.getNumberOfPages()});
+          wr(b.text, true, hs, hsLhm * 0.6);
         } else if (b.T==='p'||b.T==='t') {
-          wr(b.text, false, fSize, lhm*0.25);
+          wr(b.text, false, fSize, lhm*0.3, indent);
         } else if (b.T==='br') {
-          cy += lhm*0.5;
+          cy += lhm*0.6;
         } else if (b.T==='hr') {
           cy += lhm*0.3;
           if (cy+2>ph-mgn) np();
@@ -388,6 +430,15 @@ async function handleFile(file) {
       setProgress(35+Math.round(ci/epub.chapters.length*60));
       setStatus(`Chapter ${ci+1} / ${epub.chapters.length}…`);
       if (ci%2===0) await new Promise(r=>setTimeout(r,0));
+    }
+
+    // Add PDF outline (bookmarks) for navigation
+    if (outlineItems.length) {
+      addLog(`Adding ${outlineItems.length} outline entries…`);
+      for (const item of outlineItems) {
+        doc.outline.add(null, item.title, {pageNumber: item.page});
+      }
+      addLog('Outline added', 'ok');
     }
 
     setProgress(97); setStatus('Generating PDF…');
