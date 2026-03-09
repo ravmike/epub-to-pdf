@@ -270,19 +270,12 @@ function toBlocks(html) {
   const out = [];
 
   function isChapterTitle(n) {
-    // Detect chapter titles: <p> consisting entirely of <strong> text
-    // Common in FB2→EPUB conversions: <p class="p"><strong>Глава 1. Title</strong></p>
-    if (n.children.length === 1 && n.children[0].tagName === 'STRONG') {
-      const t = n.textContent.trim();
-      // Filter out short dialog dashes wrapped in <strong>
-      if (t.length > 3 && t.length < 200 && !/^[–—-]\s*$/.test(t)) return true;
-    }
-    // Also detect explicit heading patterns in text
+    // Only detect headings by explicit chapter/section keywords.
+    // The old <strong>-based heuristic caused massive false-positives (any
+    // bold emphasis, dialog line, or author name was treated as a chapter title).
     const t = n.textContent.trim();
-    if (/^(глава|chapter|часть|part|книга|book|раздел|section|пролог|эпилог|prologue|epilogue)\s/i.test(t)) {
-      if (t.length < 200) return true;
-    }
-    return false;
+    if (t.length < 2 || t.length > 200) return false;
+    return /^(глава|chapter|часть|part|книга|book|раздел|section|пролог|эпилог|prologue|epilogue)\b/i.test(t);
   }
 
   (function walk(n) {
@@ -309,7 +302,20 @@ function toBlocks(html) {
         out.push({T:'h', lv:1, text:t});
         return;
       }
-      out.push({T:'p', text:t});
+      // Sub-walk to preserve <br> line breaks inside the paragraph
+      const segs = [];
+      (function pw(pn) {
+        if (pn.nodeType===3) { segs.push(pn.textContent.replace(/\s+/g,' ')); return; }
+        if (pn.nodeType!==1) return;
+        if (pn.tagName==='BR') { segs.push('\n'); return; }
+        for (const c of pn.childNodes) pw(c);
+      })(n);
+      const parts = segs.join('').split('\n');
+      for (let i=0; i<parts.length; i++) {
+        const s = parts[i].trim();
+        if (s) out.push({T:'p', text:s});
+        if (i < parts.length-1) out.push({T:'br'});
+      }
       return;
     }
     if (['blockquote','li','figcaption','td','th','dt','dd','address','pre'].includes(tag)) {
@@ -398,16 +404,27 @@ async function handleFile(file) {
 
       for (const b of blocks) {
         if (b.T==='h') {
-          // Chapter heading: new page (unless already at top), larger bold font
-          if (cy > mgn + lhm) np(); // start on fresh page if not already
-          const hs = Math.round(fSize * 1.5);
-          const hsLhm = hs*pt2mm*lh;
-          cy += hsLhm * 0.8; // top padding
-          // Record for outline
+          const major = b.lv <= 2;
+          if (major) {
+            // h1/h2: chapter-level break — start on a fresh page
+            if (cy > mgn + lhm) np();
+          } else {
+            // h3–h6: in-page section header — just add some breathing room
+            cy += lhm * 0.6;
+            if (cy + lhm * 3 > ph - mgn) np();
+          }
+          const hs = b.lv === 1 ? Math.round(fSize * 1.5)
+                   : b.lv === 2 ? Math.round(fSize * 1.3)
+                   : Math.round(fSize * 1.15);
+          const hsLhm = hs * pt2mm * lh;
+          if (major) cy += hsLhm * 0.8; // top padding for chapter headings
           outlineItems.push({title: b.text, page: doc.internal.getNumberOfPages()});
-          wr(b.text, true, hs, hsLhm * 0.6);
-        } else if (b.T==='p'||b.T==='t') {
+          wr(b.text, true, hs, hsLhm * 0.5);
+        } else if (b.T==='p') {
           wr(b.text, false, fSize, lhm*0.3, indent);
+        } else if (b.T==='t') {
+          // Raw text node (direct child of container, not inside <p>) — no indent
+          wr(b.text, false, fSize, lhm*0.1, 0);
         } else if (b.T==='br') {
           cy += lhm*0.6;
         } else if (b.T==='hr') {
