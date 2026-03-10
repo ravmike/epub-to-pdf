@@ -126,10 +126,46 @@ export function toBlocks(html) {
   div.innerHTML = match ? match[1] : html;
   const out = [];
 
-  function isChapterTitle(node) {
-    const text = node.textContent.trim();
-    if (text.length < 2 || text.length > 200) return false;
-    return /^(глава|chapter|часть|part|книга|book|раздел|section|пролог|эпилог|prologue|epilogue)\b/i.test(text);
+  function hasClass(node, names) {
+    return names.some((name) => node.classList?.contains(name));
+  }
+
+  function isNumericNoteLabel(text) {
+    return /^\d{1,4}$/.test(text);
+  }
+
+  function isDecorativeSeparator(text) {
+    const clean = text.trim();
+    if (!clean) return true;
+    return !/[\p{L}\p{N}]/u.test(clean);
+  }
+
+  function isUnicodeChapterTitle(text) {
+    const head = text.trim();
+    if (head.length < 2 || head.length > 200) return false;
+    return /^(?:глава|chapter|часть|part|книга|book|раздел|section|пролог|эпилог|prologue|epilogue)(?:[\s.:,;-]|$)/iu.test(head);
+  }
+
+  function isStrongOnlyParagraph(node) {
+    const kids = Array.from(node.childNodes).filter((child) => {
+      if (child.nodeType === 3) return child.textContent.trim();
+      return true;
+    });
+    if (!kids.length) return false;
+    return kids.every((child) => child.nodeType === 1 && ['strong', 'b'].includes(child.tagName.toLowerCase()));
+  }
+
+  function looksLikeStandaloneHeading(text) {
+    const clean = text.trim();
+    if (clean.length < 2 || clean.length > 120) return false;
+    if (isNumericNoteLabel(clean)) return false;
+    return isUnicodeChapterTitle(clean);
+  }
+
+  function pushHeading(text, level = 1) {
+    const clean = text.trim();
+    if (!clean || isNumericNoteLabel(clean) || isDecorativeSeparator(clean)) return;
+    out.push({ T: 'h', lv: level, text: clean });
   }
 
   (function walk(node) {
@@ -145,7 +181,7 @@ export function toBlocks(html) {
 
     if (/^h[1-6]$/.test(tag)) {
       const text = node.textContent.trim();
-      if (text) out.push({ T: 'h', lv: Number(tag[1]), text });
+      if (text) pushHeading(text, Number(tag[1]));
       return;
     }
 
@@ -182,8 +218,13 @@ export function toBlocks(html) {
       }
       if (!text) return;
 
-      if (isChapterTitle(node)) {
-        out.push({ T: 'h', lv: 1, text });
+      if (hasClass(node, ['subtitle'])) {
+        pushHeading(text, 2);
+        return;
+      }
+
+      if (looksLikeStandaloneHeading(text) || (isStrongOnlyParagraph(node) && text.length <= 120)) {
+        pushHeading(text, 1);
         return;
       }
 
@@ -207,6 +248,19 @@ export function toBlocks(html) {
         if (part) out.push({ T: 'p', text: part });
         if (i < parts.length - 1) out.push({ T: 'br' });
       }
+      return;
+    }
+
+    if (['div', 'section', 'article', 'header'].includes(tag) && hasClass(node, ['title', 'title1', 'title2', 'title3'])) {
+      const text = node.textContent.trim();
+      const level = hasClass(node, ['title3']) ? 2 : 1;
+      pushHeading(text, level);
+      return;
+    }
+
+    if (['div', 'section', 'article', 'header'].includes(tag) && hasClass(node, ['subtitle'])) {
+      const text = node.textContent.trim();
+      pushHeading(text, 2);
       return;
     }
 
