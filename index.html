@@ -3,185 +3,342 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>EPUB to PDF</title>
+<title>EPUB to DOCX</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&display=swap');
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Manrope:wght@400;500;700&display=swap');
 
   :root {
-    --bg: #0e0e10;
-    --surface: #18181b;
-    --surface-soft: #111114;
-    --border: #27272a;
-    --text: #e4e4e7;
-    --text-dim: #71717a;
-    --accent: #f97316;
-    --accent-dim: #f9731622;
-    --success: #22c55e;
-    --error: #ef4444;
+    --bg: #f4ead8;
+    --paper: rgba(255, 250, 242, 0.82);
+    --text: #241912;
+    --text-dim: #6a594d;
+    --line: rgba(63, 45, 33, 0.12);
+    --accent: #a84e2f;
+    --accent-soft: rgba(168, 78, 47, 0.12);
+    --accent-strong: #7f351c;
+    --success: #216a3f;
+    --error: #b43a32;
   }
 
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
 
   body {
-    font-family: 'JetBrains Mono', monospace;
-    background: radial-gradient(circle at top, #16161a 0%, #0e0e10 58%);
-    color: var(--text);
     min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
     padding: 2rem;
+    font-family: 'Manrope', sans-serif;
+    color: var(--text);
+    background:
+      radial-gradient(circle at top left, rgba(255, 255, 255, 0.65), transparent 35%),
+      linear-gradient(160deg, #f8efdf 0%, #ecd8b8 48%, #dcc4a1 100%);
   }
 
-  .container { width: 100%; max-width: 620px; }
-  .modes { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  .shell {
+    width: 100%;
+    max-width: 780px;
+    margin: 0 auto;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 28px;
+    box-shadow: 0 24px 80px rgba(72, 43, 23, 0.14);
+    overflow: hidden;
+    backdrop-filter: blur(18px);
+  }
+
+  .masthead {
+    padding: 1.2rem 1.2rem 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+  }
+
   .mode-link {
     text-decoration: none;
     color: var(--text-dim);
-    font-size: 0.72rem;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    border: 1px solid var(--border);
+    font-size: 0.84rem;
+    letter-spacing: 0.03em;
+    border: 1px solid var(--line);
     border-radius: 999px;
-    padding: 0.65rem 0.95rem;
-    background: var(--surface-soft);
-    transition: all 0.2s;
+    padding: 0.55rem 0.9rem;
+    transition: 0.2s ease;
+    background: rgba(255, 255, 255, 0.42);
   }
-  .mode-link:hover { color: var(--text); border-color: var(--accent); }
-  .mode-link.current { color: #000; background: var(--accent); border-color: var(--accent); }
 
-  header { margin-bottom: 1.6rem; }
-  h1 { font-size: 1.8rem; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 0.4rem; }
-  h1 span { color: var(--accent); }
-  .subtitle { color: var(--text-dim); font-size: 0.75rem; line-height: 1.6; }
+  .mode-link:hover { border-color: rgba(168, 78, 47, 0.35); color: var(--text); }
+  .mode-link.current { background: var(--accent); border-color: var(--accent); color: #fff7f2; }
 
-  .notice {
-    margin-bottom: 1.3rem;
-    background: linear-gradient(180deg, rgba(249, 115, 22, 0.08), rgba(24, 24, 27, 0.92));
-    border: 1px solid rgba(249, 115, 22, 0.2);
-    border-radius: 12px;
-    padding: 0.95rem 1rem;
+  .hero {
+    padding: 1.4rem 2.2rem 2rem;
+    border-bottom: 1px solid var(--line);
   }
-  .notice strong {
-    display: block;
-    color: var(--accent);
-    font-size: 0.72rem;
-    letter-spacing: 0.08em;
+
+  .eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    font-size: 0.75rem;
+    font-weight: 700;
     text-transform: uppercase;
-    margin-bottom: 0.4rem;
+    letter-spacing: 0.08em;
   }
-  .notice p {
+
+  h1 {
+    margin-top: 1rem;
+    font-family: 'Fraunces', serif;
+    font-size: clamp(2.4rem, 5vw, 4.3rem);
+    line-height: 0.94;
+    letter-spacing: -0.04em;
+    max-width: 10ch;
+  }
+
+  .subtitle {
+    margin-top: 1rem;
+    max-width: 52ch;
     color: var(--text-dim);
-    font-size: 0.72rem;
+    font-size: 0.95rem;
     line-height: 1.7;
   }
 
+  .hero-grid {
+    margin-top: 1.4rem;
+    display: grid;
+    grid-template-columns: 1.4fr 0.8fr;
+    gap: 1rem;
+  }
+
+  .note, .pillars {
+    border: 1px solid var(--line);
+    border-radius: 20px;
+    padding: 1rem 1.1rem;
+    background: rgba(255, 255, 255, 0.48);
+  }
+
+  .note strong, .pillars strong {
+    display: block;
+    margin-bottom: 0.4rem;
+    font-size: 0.84rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent-strong);
+  }
+
+  .note p, .pillars p {
+    font-size: 0.9rem;
+    line-height: 1.65;
+    color: var(--text-dim);
+  }
+
+  .main {
+    padding: 1.6rem 2.2rem 2.2rem;
+  }
+
   .drop-zone {
-    border: 2px dashed var(--border);
-    border-radius: 12px;
-    padding: 3rem 2rem;
+    border: 1.5px dashed rgba(168, 78, 47, 0.35);
+    border-radius: 24px;
+    padding: 2.8rem 1.5rem;
     text-align: center;
     cursor: pointer;
-    transition: all 0.2s;
-    background: var(--surface);
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 251, 245, 0.75)),
+      repeating-linear-gradient(135deg, transparent 0 18px, rgba(168, 78, 47, 0.025) 18px 36px);
+    transition: 0.2s ease;
   }
-  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: var(--accent-dim); }
-  .drop-zone.drag-over .drop-icon { transform: scale(1.15); }
-  .drop-icon { font-size: 2.5rem; margin-bottom: 1rem; transition: transform 0.2s; display: block; }
-  .drop-label { font-size: 0.85rem; color: var(--text-dim); line-height: 1.8; }
-  .drop-label strong { color: var(--accent); font-weight: 600; }
+
+  .drop-zone:hover,
+  .drop-zone.drag-over {
+    transform: translateY(-1px);
+    border-color: var(--accent);
+    box-shadow: 0 14px 32px rgba(168, 78, 47, 0.1);
+  }
+
+  .drop-mark {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 68px;
+    height: 68px;
+    margin-bottom: 1rem;
+    border-radius: 18px;
+    background: #fff8f1;
+    border: 1px solid rgba(168, 78, 47, 0.2);
+    font-size: 1.9rem;
+  }
+
+  .drop-zone h2 {
+    font-family: 'Fraunces', serif;
+    font-size: 1.75rem;
+    letter-spacing: -0.03em;
+  }
+
+  .drop-zone p {
+    margin-top: 0.7rem;
+    color: var(--text-dim);
+    font-size: 0.92rem;
+    line-height: 1.7;
+  }
+
   input[type="file"] { display: none; }
 
-  .settings { margin-top: 1.5rem; display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
-  .setting { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 0.75rem 1rem; }
-  .setting label { display: block; font-size: 0.65rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--text-dim); margin-bottom: 0.4rem; }
-  .setting select, .setting input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; color: var(--text); font-family: inherit; font-size: 0.8rem; padding: 0.4rem 0.5rem; outline: none; }
-  .setting select:focus, .setting input:focus { border-color: var(--accent); }
-
-  .status { margin-top: 1.5rem; display: none; }
+  .status { margin-top: 1.4rem; display: none; }
   .status.visible { display: block; }
-  .progress-bar { height: 4px; background: var(--border); border-radius: 2px; overflow: hidden; margin-bottom: 0.75rem; }
-  .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; width: 0%; transition: width 0.3s; }
-  .status-text { font-size: 0.75rem; color: var(--text-dim); display: flex; align-items: center; gap: 0.5rem; }
+  .progress-bar {
+    height: 6px;
+    background: rgba(63, 45, 33, 0.09);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    width: 0%;
+    background: linear-gradient(90deg, #d77f57 0%, #a84e2f 100%);
+    border-radius: 999px;
+    transition: width 0.25s ease;
+  }
+  .status-text {
+    margin-top: 0.7rem;
+    display: flex;
+    align-items: center;
+    gap: 0.55rem;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+  }
   .status-text.error { color: var(--error); }
   .status-text.success { color: var(--success); }
-  .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 0.8s linear infinite; flex-shrink: 0; }
+  .spinner {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: 2px solid rgba(63, 45, 33, 0.12);
+    border-top-color: var(--accent);
+    animation: spin 0.8s linear infinite;
+  }
   @keyframes spin { to { transform: rotate(360deg); } }
 
-  .log { margin-top: 1.5rem; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1rem; max-height: 200px; overflow-y: auto; font-size: 0.7rem; color: var(--text-dim); line-height: 1.8; display: none; }
+  .log {
+    margin-top: 1rem;
+    padding: 1rem 1.05rem;
+    border-radius: 18px;
+    border: 1px solid var(--line);
+    background: rgba(255, 255, 255, 0.58);
+    font-size: 0.78rem;
+    line-height: 1.7;
+    color: var(--text-dim);
+    max-height: 240px;
+    overflow-y: auto;
+    display: none;
+  }
   .log.visible { display: block; }
-  .log .warn { color: var(--accent); }
+  .log .warn { color: var(--accent-strong); }
   .log .err { color: var(--error); }
   .log .ok { color: var(--success); }
 
-  .result { margin-top: 1.5rem; display: none; }
+  .result { margin-top: 1.2rem; display: none; }
   .result.visible { display: block; }
-  .result button { width: 100%; padding: 0.9rem; background: var(--accent); color: #000; border: none; border-radius: 8px; font-family: inherit; font-size: 0.85rem; font-weight: 700; cursor: pointer; transition: opacity 0.15s; }
-  .result button:hover { opacity: 0.85; }
-  .file-info { margin-top: 0.6rem; font-size: 0.7rem; color: var(--text-dim); text-align: center; }
+  .result button {
+    width: 100%;
+    padding: 1rem 1.1rem;
+    border: none;
+    border-radius: 18px;
+    background: linear-gradient(135deg, #a84e2f 0%, #7f351c 100%);
+    color: #fff7f2;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    transition: 0.2s ease;
+  }
+  .result button:hover { transform: translateY(-1px); box-shadow: 0 16px 34px rgba(127, 53, 28, 0.18); }
+  .file-info {
+    margin-top: 0.65rem;
+    text-align: center;
+    font-size: 0.76rem;
+    color: var(--text-dim);
+  }
 
-  footer { margin-top: 3rem; font-size: 0.65rem; color: var(--text-dim); text-align: center; line-height: 1.6; opacity: 0.6; }
+  .footer {
+    padding: 1rem 2.2rem 1.6rem;
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    line-height: 1.6;
+  }
 
-  @media (max-width: 640px) {
-    .settings { grid-template-columns: 1fr; }
+  @media (max-width: 720px) {
+    body { padding: 1rem; }
+    .hero, .main, .footer { padding-left: 1.2rem; padding-right: 1.2rem; }
+    .hero-grid { grid-template-columns: 1fr; }
+    .masthead { padding: 1rem 1rem 0; }
+    h1 { max-width: none; }
   }
 </style>
 </head>
 <body>
-<div class="container">
-  <div class="modes">
-    <a class="mode-link current" href="./index.html">PDF converter</a>
-    <a class="mode-link" href="./docx.html">DOCX for ElevenReader</a>
-  </div>
+  <div class="shell">
+    <div class="masthead">
+      <span class="mode-link current">Homepage</span>
+      <a class="mode-link" href="./docx.html">Legacy `/docx.html` alias</a>
+    </div>
 
-  <header>
-    <h1>EPUB <span>→</span> PDF</h1>
-    <p class="subtitle">Client-side converter · full Unicode · nothing leaves your browser</p>
-  </header>
+    <section class="hero">
+      <span class="eyebrow">Reader-first export</span>
+      <h1>EPUB to DOCX for clean reader parsing.</h1>
+      <p class="subtitle">This is now the primary GitHub Pages entrypoint. The export stays entirely inside your browser and favors semantic document structure so ElevenReader and similar apps can navigate the result through real heading styles.</p>
+      <div class="hero-grid">
+        <div class="note">
+          <strong>What it keeps</strong>
+          <p>EPUB headings become real Word headings, chapter-like labels are promoted when source markup is weak, paragraph flow stays readable, and supported EPUB images are embedded into the final DOCX.</p>
+        </div>
+        <div class="pillars">
+          <strong>What changed</strong>
+          <p>The old PDF path is removed from the Pages UI. Navigation now depends on DOCX heading styles instead of a separate TOC field.</p>
+        </div>
+      </div>
+    </section>
 
-  <div class="notice">
-    <strong>Reader compatibility note</strong>
-    <p>If your target app parses PDFs badly, use the new DOCX flow instead. The DOCX page keeps document structure closer to the EPUB and avoids print-oriented pagination choices.</p>
-  </div>
+    <main class="main">
+      <div class="drop-zone" id="dropZone">
+        <div class="drop-mark">DOCX</div>
+        <h2>Drop an EPUB to build a DOCX</h2>
+        <p>Drag a <strong>.epub</strong> here or click to choose. The output is tuned for ingestion and navigation, not print-perfect pagination.</p>
+        <input type="file" id="fileInput" accept=".epub">
+      </div>
 
-  <div class="drop-zone" id="dropZone">
-    <span class="drop-icon">📖</span>
-    <p class="drop-label">Drop <strong>.epub</strong> here or click to choose</p>
-    <input type="file" id="fileInput" accept=".epub">
-  </div>
+      <div class="status" id="status">
+        <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+        <div class="status-text" id="statusText"><div class="spinner" id="spinner"></div><span id="statusLabel"></span></div>
+      </div>
 
-  <div class="settings">
-    <div class="setting"><label>Page size</label><select id="pageSize"><option value="a4">A4</option><option value="a5">A5</option><option value="letter">Letter</option></select></div>
-    <div class="setting"><label>Font size (pt)</label><input type="number" id="fontSize" value="11" min="8" max="24"></div>
-    <div class="setting"><label>Margin (mm)</label><input type="number" id="pageMargin" value="20" min="5" max="50"></div>
-    <div class="setting"><label>Line height</label><select id="lineHeight"><option value="1.4">Compact</option><option value="1.6" selected>Normal</option><option value="1.8">Relaxed</option><option value="2.0">Double</option></select></div>
-  </div>
+      <div class="log" id="log"></div>
 
-  <div class="status" id="status">
-    <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
-    <div class="status-text" id="statusText"><div class="spinner" id="spinner"></div><span id="statusLabel"></span></div>
+      <div class="result" id="result">
+        <button id="downloadBtn">Download DOCX</button>
+        <div class="file-info" id="fileInfo"></div>
+      </div>
+    </main>
+
+    <div class="footer">JSZip + docx 9.5.1 + browser APIs · no upload · semantic DOCX headings for Word and reader-app navigation</div>
   </div>
-  <div class="log" id="log"></div>
-  <div class="result" id="result">
-    <button id="downloadBtn">Download PDF</button>
-    <div class="file-info" id="fileInfo"></div>
-  </div>
-  <footer>JSZip + jsPDF + Noto Sans · zero server calls</footer>
-</div>
 
 <script type="module">
 import { parseEpub, toBlocks } from './epub-core.js';
-
-const { jsPDF } = window.jspdf;
-const FONT_URL = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf';
+const docxLib = await import('https://esm.sh/docx@9.5.1?bundle');
+const {
+  AlignmentType,
+  Document,
+  HeadingLevel,
+  ImageRun,
+  Packer,
+  Paragraph,
+  TextRun,
+} = docxLib;
 
 const $ = (id) => document.getElementById(id);
-let pdfBlob = null;
-let pdfFileName = '';
-let fontCache = null;
+let docxBlob = null;
+let docxFileName = '';
 
 $('dropZone').addEventListener('click', () => $('fileInput').click());
 $('dropZone').addEventListener('dragover', (event) => {
@@ -193,19 +350,20 @@ $('dropZone').addEventListener('drop', (event) => {
   event.preventDefault();
   $('dropZone').classList.remove('drag-over');
   const file = event.dataTransfer.files[0];
-  if (file?.name.endsWith('.epub')) handleFile(file);
+  if (file?.name.toLowerCase().endsWith('.epub')) handleFile(file);
   else addLog('Drop an .epub file', 'err');
 });
 $('fileInput').addEventListener('change', (event) => {
   if (event.target.files[0]) handleFile(event.target.files[0]);
 });
 $('downloadBtn').addEventListener('click', () => {
-  if (!pdfBlob) return;
+  if (!docxBlob) return;
+  const url = URL.createObjectURL(docxBlob);
   const a = document.createElement('a');
-  a.href = URL.createObjectURL(pdfBlob);
-  a.download = pdfFileName;
+  a.href = url;
+  a.download = docxFileName;
   a.click();
-  URL.revokeObjectURL(a.href);
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 });
 
 function addLog(msg, cls = '') {
@@ -228,178 +386,244 @@ function setProgress(value) {
   $('progressFill').style.width = value + '%';
 }
 
-async function loadFont() {
-  if (fontCache) return fontCache;
-  addLog('Downloading Noto Sans (full Unicode)…');
-  const response = await fetch(FONT_URL);
-  if (!response.ok) throw new Error('Font download failed: ' + response.status);
-  fontCache = await response.arrayBuffer();
-  addLog(`Font: ${(fontCache.byteLength / 1048576).toFixed(1)} MB loaded`, 'ok');
-  return fontCache;
+function bodyParagraph(text, firstLine = true) {
+  return new Paragraph({
+    spacing: { after: 120 },
+    indent: firstLine ? { firstLine: 400 } : undefined,
+    children: [new TextRun(text)],
+  });
 }
 
-function ab2b64(buf) {
-  const u8 = new Uint8Array(buf);
-  let s = '';
-  for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
-  return btoa(s);
+function headingLevelFor(level) {
+  if (level <= 1) return HeadingLevel.HEADING_1;
+  if (level === 2) return HeadingLevel.HEADING_2;
+  return HeadingLevel.HEADING_3;
 }
 
-function registerFont(doc, data) {
-  const b64 = ab2b64(data);
-  doc.addFileToVFS('NotoSans-Regular.ttf', b64);
-  doc.addFont('NotoSans-Regular.ttf', 'NotoSans', 'normal');
-  doc.addFileToVFS('NotoSans-Bold.ttf', b64);
-  doc.addFont('NotoSans-Bold.ttf', 'NotoSans', 'bold');
+function base64ToUint8Array(base64) {
+  const bin = atob(base64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function getImageType(mime) {
+  switch ((mime || '').toLowerCase()) {
+    case 'image/png': return 'png';
+    case 'image/jpeg':
+    case 'image/jpg': return 'jpg';
+    case 'image/gif': return 'gif';
+    case 'image/bmp': return 'bmp';
+    case 'image/svg+xml': return 'svg';
+    default: return null;
+  }
+}
+
+function getImageSize(src) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve({ width: img.naturalWidth, height: img.naturalHeight });
+    img.onerror = () => reject(new Error('Image decode failed'));
+    img.src = src;
+  });
+}
+
+async function imageParagraph(src) {
+  const match = src.match(/^data:(image\/[^;]+);base64,(.+)$/);
+  if (!match) return null;
+
+  const mime = match[1];
+  const type = getImageType(mime);
+  if (!type) return null;
+
+  const data = base64ToUint8Array(match[2]);
+  const payload = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength);
+  const dims = await getImageSize(src);
+  const maxWidth = 520;
+  const minWidth = 64;
+  let width = dims.width || maxWidth;
+  let height = dims.height || Math.round(maxWidth * 0.75);
+
+  if (width > maxWidth) {
+    const scale = maxWidth / width;
+    width = maxWidth;
+    height = Math.max(1, Math.round(height * scale));
+  }
+  if (width < minWidth) {
+    const scale = minWidth / Math.max(width, 1);
+    width = minWidth;
+    height = Math.max(1, Math.round(height * scale));
+  }
+
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 160 },
+    children: [new ImageRun({
+      type,
+      data: payload,
+      transformation: { width, height },
+      altText: {
+        title: 'EPUB image',
+        description: 'Imported from EPUB',
+        name: 'EPUB image',
+      },
+    })],
+  });
+}
+
+async function buildDoc(epub) {
+  let embeddedImages = 0;
+  const children = [
+    new Paragraph({
+      heading: HeadingLevel.TITLE,
+      children: [new TextRun(epub.bookTitle)],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 240 },
+      children: [new TextRun({
+        text: 'Structured EPUB export for reader apps',
+        italics: true,
+        color: '7A5F51',
+        size: 22,
+      })],
+    }),
+    new Paragraph({ spacing: { after: 240 } }),
+  ];
+
+  for (let i = 0; i < epub.chapters.length; i += 1) {
+    const blocks = toBlocks(epub.chapters[i].html);
+    for (const block of blocks) {
+      if (block.T === 'h') {
+        children.push(new Paragraph({
+          heading: headingLevelFor(block.lv || 1),
+          children: [new TextRun(block.text)],
+        }));
+      } else if (block.T === 'p') {
+        children.push(bodyParagraph(block.text, true));
+      } else if (block.T === 't') {
+        children.push(bodyParagraph(block.text, false));
+      } else if (block.T === 'br' || block.T === 'hr') {
+        children.push(new Paragraph({ spacing: { after: 120 } }));
+      } else if (block.T === 'img') {
+        try {
+          const para = await imageParagraph(block.src);
+          if (para) {
+            children.push(para);
+            embeddedImages += 1;
+          } else {
+            addLog('Skipped one image with an unsupported format', 'warn');
+          }
+        } catch (_) {
+          addLog('Skipped one image that could not be embedded', 'warn');
+        }
+      }
+    }
+
+    const done = 30 + Math.round(((i + 1) / Math.max(epub.chapters.length, 1)) * 55);
+    setProgress(done);
+    setStatus(`Structuring chapter ${i + 1} / ${epub.chapters.length}…`);
+    if (i % 2 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+
+  if (embeddedImages) addLog(`Embedded ${embeddedImages} image${embeddedImages === 1 ? '' : 's'}`, 'ok');
+
+  return new Document({
+    creator: 'EPUB to DOCX',
+    title: epub.bookTitle,
+    description: 'Structured EPUB to DOCX export for reader compatibility',
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: 'Arial',
+            size: 24,
+            color: '241912',
+          },
+        },
+      },
+      paragraphStyles: [
+        {
+          id: 'Title',
+          name: 'Title',
+          basedOn: 'Normal',
+          run: { font: 'Arial', size: 52, bold: true, color: '241912' },
+          paragraph: { alignment: AlignmentType.CENTER, spacing: { before: 240, after: 120 } },
+        },
+        {
+          id: 'Heading1',
+          name: 'Heading 1',
+          basedOn: 'Normal',
+          next: 'Normal',
+          quickFormat: true,
+          run: { font: 'Arial', size: 32, bold: true, color: '5D2818' },
+          paragraph: { spacing: { before: 260, after: 180 }, outlineLevel: 0 },
+        },
+        {
+          id: 'Heading2',
+          name: 'Heading 2',
+          basedOn: 'Normal',
+          next: 'Normal',
+          quickFormat: true,
+          run: { font: 'Arial', size: 28, bold: true, color: '7F351C' },
+          paragraph: { spacing: { before: 200, after: 140 }, outlineLevel: 1 },
+        },
+        {
+          id: 'Heading3',
+          name: 'Heading 3',
+          basedOn: 'Normal',
+          next: 'Normal',
+          quickFormat: true,
+          run: { font: 'Arial', size: 25, bold: true, color: '8D4A33' },
+          paragraph: { spacing: { before: 180, after: 120 }, outlineLevel: 2 },
+        },
+      ],
+    },
+    sections: [{
+      properties: {
+        page: {
+          margin: { top: 1440, right: 1320, bottom: 1440, left: 1320 },
+        },
+      },
+      children,
+    }],
+  });
 }
 
 async function handleFile(file) {
-  pdfBlob = null;
+  docxBlob = null;
+  docxFileName = file.name.replace(/\.epub$/i, '') + '.docx';
   $('result').classList.remove('visible');
   $('log').innerHTML = '';
   $('log').classList.remove('visible');
   setProgress(0);
 
-  pdfFileName = file.name.replace(/\.epub$/i, '') + '.pdf';
-
   try {
     addLog(`File: ${file.name} (${(file.size / 1048576).toFixed(2)} MB)`);
-
-    setStatus('Loading font…');
-    setProgress(5);
-    const fontData = await loadFont();
-    setProgress(12);
-
     setStatus('Reading EPUB…');
-    const buffer = await file.arrayBuffer();
-    setProgress(18);
+    setProgress(8);
 
-    setStatus('Parsing structure…');
+    const buffer = await file.arrayBuffer();
+    setProgress(16);
+
+    setStatus('Parsing EPUB structure…');
     const epub = await parseEpub(buffer, {
       log: (msg) => addLog(msg, msg.startsWith('Missing:') ? 'warn' : ''),
     });
-    setProgress(30);
+    setProgress(28);
 
-    setStatus('Preparing PDF…');
-    const pageKey = $('pageSize').value;
-    const fontSize = parseInt($('fontSize').value, 10) || 11;
-    const margin = parseInt($('pageMargin').value, 10) || 20;
-    const lineHeight = parseFloat($('lineHeight').value) || 1.6;
-    const sizes = { a4: [210, 297], a5: [148, 210], letter: [215.9, 279.4] };
-    const [pageWidth, pageHeight] = sizes[pageKey] || sizes.a4;
-    const usableWidth = pageWidth - margin * 2;
-    const usableHeight = pageHeight - margin * 2;
-    const pt2mm = 0.3528;
+    setStatus('Building DOCX structure…');
+    const doc = await buildDoc(epub);
 
-    const doc = new jsPDF({ unit: 'mm', format: [pageWidth, pageHeight] });
-    registerFont(doc, fontData);
-    doc.setFont('NotoSans', 'normal');
-    addLog('Font registered', 'ok');
-    setProgress(35);
+    setStatus('Packing DOCX…');
+    setProgress(90);
+    docxBlob = await Packer.toBlob(doc);
 
-    doc.setFontSize(22);
-    doc.setFont('NotoSans', 'bold');
-    const titleLines = doc.splitTextToSize(epub.bookTitle, usableWidth * 0.8);
-    doc.text(titleLines, pageWidth / 2, pageHeight / 2 - titleLines.length * 22 * pt2mm * 0.7, { align: 'center' });
-    doc.setFont('NotoSans', 'normal');
-    doc.setFontSize(fontSize);
-
-    let cy = margin;
-    const nextPage = () => {
-      doc.addPage([pageWidth, pageHeight]);
-      cy = margin;
-    };
-    const indent = 7;
-    const outlineItems = [];
-    let startedContent = false;
-
-    function writeText(text, bold = false, size = fontSize, after = 0, firstIndent = 0) {
-      doc.setFontSize(size);
-      doc.setFont('NotoSans', bold ? 'bold' : 'normal');
-      const lineHeightMm = size * pt2mm * lineHeight;
-      const lines = doc.splitTextToSize(text, usableWidth - firstIndent);
-      for (let i = 0; i < lines.length; i += 1) {
-        if (cy + lineHeightMm > pageHeight - margin) nextPage();
-        const x = margin + (i === 0 ? firstIndent : 0);
-        doc.text(lines[i], x, cy);
-        cy += lineHeightMm;
-      }
-      cy += after;
-    }
-
-    for (let chapterIndex = 0; chapterIndex < epub.chapters.length; chapterIndex += 1) {
-      const blocks = toBlocks(epub.chapters[chapterIndex].html);
-      if (!blocks.length) continue;
-      if (!startedContent) {
-        nextPage();
-        startedContent = true;
-      }
-
-      const lineHeightMm = fontSize * pt2mm * lineHeight;
-      for (const block of blocks) {
-        if (block.T === 'h') {
-          const headingSize = block.lv === 1 ? Math.round(fontSize * 1.5)
-            : block.lv === 2 ? Math.round(fontSize * 1.3)
-            : Math.round(fontSize * 1.15);
-          const headingHeight = headingSize * pt2mm * lineHeight;
-          cy += headingHeight * 0.35;
-          if (cy + headingHeight * 2 > pageHeight - margin) nextPage();
-          outlineItems.push({ title: block.text, page: doc.internal.getNumberOfPages() });
-          writeText(block.text, true, headingSize, headingHeight * 0.4);
-        } else if (block.T === 'p') {
-          writeText(block.text, false, fontSize, lineHeightMm * 0.3, indent);
-        } else if (block.T === 't') {
-          writeText(block.text, false, fontSize, lineHeightMm * 0.15, 0);
-        } else if (block.T === 'br') {
-          cy += lineHeightMm * 0.6;
-        } else if (block.T === 'hr') {
-          cy += lineHeightMm * 0.25;
-          if (cy + 2 > pageHeight - margin) nextPage();
-          doc.setDrawColor(160);
-          doc.setLineWidth(0.3);
-          doc.line(margin + usableWidth * 0.2, cy, pageWidth - margin - usableWidth * 0.2, cy);
-          cy += lineHeightMm * 0.45;
-        } else if (block.T === 'img') {
-          try {
-            const props = doc.getImageProperties(block.src);
-            let imgWidth = Math.min(usableWidth * 0.9, props.width * 0.264583);
-            let imgHeight = imgWidth * (props.height / props.width);
-            if (imgHeight > usableHeight * 0.55) {
-              imgHeight = usableHeight * 0.55;
-              imgWidth = imgHeight * (props.width / props.height);
-            }
-            if (cy + imgHeight > pageHeight - margin) nextPage();
-            doc.addImage(block.src, margin + (usableWidth - imgWidth) / 2, cy, imgWidth, imgHeight);
-            cy += imgHeight + lineHeightMm * 0.5;
-          } catch (_) {
-            addLog('Skipped one image that jsPDF could not decode', 'warn');
-          }
-        }
-      }
-
-      setProgress(35 + Math.round(((chapterIndex + 1) / epub.chapters.length) * 60));
-      setStatus(`Section ${chapterIndex + 1} / ${epub.chapters.length}…`);
-      if (chapterIndex % 2 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
-    }
-
-    if (outlineItems.length) {
-      addLog(`Adding ${outlineItems.length} outline entries…`);
-      for (const item of outlineItems) doc.outline.add(null, item.title, { pageNumber: item.page });
-      addLog('Outline added', 'ok');
-    }
-
-    setProgress(97);
-    setStatus('Generating PDF…');
-    await new Promise((resolve) => setTimeout(resolve, 30));
-
-    pdfBlob = doc.output('blob');
-    const mb = (pdfBlob.size / 1048576).toFixed(2);
-    const pages = doc.internal.getNumberOfPages();
-
+    const mb = (docxBlob.size / 1048576).toFixed(2);
     setProgress(100);
-    setStatus(`Done — ${pages} pages, ${mb} MB`, 'success');
-    addLog(`PDF: ${pages} pages, ${mb} MB`, 'ok');
-    $('fileInfo').textContent = `${pdfFileName} · ${pages} pages · ${mb} MB`;
+    setStatus(`Done — ${mb} MB DOCX ready`, 'success');
+    addLog(`DOCX: ${mb} MB`, 'ok');
+    $('fileInfo').textContent = `${docxFileName} · ${mb} MB`;
     $('result').classList.add('visible');
   } catch (err) {
     setStatus('Error: ' + err.message, 'error');

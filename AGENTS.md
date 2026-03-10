@@ -1,33 +1,29 @@
-# EPUB → PDF / DOCX Converter
+# EPUB → DOCX Converter
 
 Client-side EPUB converter. Runs entirely in the browser — no server, no uploads.
 
-**Live**: https://ravmike.github.io/epub-to-pdf/
+**Live**: https://ravmike.github.io/epub-to-docx/
 
 ## Architecture
 
 Static browser app with:
-- `index.html` — EPUB → PDF flow
-- `docx.html` — EPUB → DOCX flow tuned for ElevenReader / reader-app ingestion
+- `index.html` — primary EPUB → DOCX GitHub Pages entrypoint
+- `docx.html` — legacy alias that redirects to `index.html`
 - `epub-core.js` — shared EPUB parsing + HTML block normalization
 
 Core libraries:
 - **JSZip** — unpack EPUB (which is a ZIP)
-- **jsPDF** — generate PDF in `index.html`
-- **docx@9.5.1** — generate DOCX in `docx.html`
-- **Noto Sans** — Unicode font loaded from Google Fonts CDN at runtime
-- Native browser download APIs for both outputs
+- **docx@9.5.1** — generate DOCX in-browser
+- Native browser download APIs for output
 
-Flows:
-- `EPUB (ZIP) → parse OPF spine → extract chapter XHTML → toBlocks() → render to PDF`
+Flow:
 - `EPUB (ZIP) → parse OPF spine → extract chapter XHTML → toBlocks() → map blocks to Word paragraphs/headings/images → pack DOCX`
 
 ## Key functions
 
 - `parseEpub(arrayBuffer, { log })` in `epub-core.js` — unzips EPUB, reads OPF, resolves spine order, inlines manifest images as data URIs, returns `{ bookTitle, chapters }`
 - `toBlocks(html)` in `epub-core.js` — parses chapter HTML into typed blocks: `{T:'h'}` (heading), `{T:'p'}` (paragraph), `{T:'br'}` (break), `{T:'hr'}`, `{T:'img'}`, `{T:'t'}` (bare text)
-- PDF `writeText(...)` in `index.html` — writes wrapped text with page breaks and spacing
-- DOCX `buildDoc(epub)` in `docx.html` — maps blocks to Word title / headings / paragraphs / images and returns a `Document`
+- DOCX `buildDoc(epub)` in `index.html` — maps blocks to Word title / headings / paragraphs / images and returns a `Document`
 
 ## Chapter detection
 
@@ -36,13 +32,6 @@ Many EPUBs (especially FB2→EPUB conversions) lack semantic `<h1>`–`<h6>` tag
 2. Detecting chapter-like paragraph text matching patterns like "Глава N.", "Chapter N.", "Часть", "Part", etc.
 
 Important: spine item boundaries are not treated as chapter/page boundaries by themselves.
-
-## PDF features
-
-- Paragraph first-line indent (7mm)
-- Empty-line breaks preserved from `<p class="empty-line"/>`
-- PDF outline/bookmarks for chapter navigation
-- Configurable page size, font size, margins, line height
 
 ## DOCX features
 
@@ -68,8 +57,8 @@ Preferred real-world regression set:
 - `samples/piter_uotts-lozhnaya_slepota-1488914040.epub`
 
 What to verify in browser:
-- `index.html` still converts EPUB to PDF without forcing a new page for every spine item
-- `docx.html` downloads a `.docx` successfully
+- `index.html` downloads a `.docx` successfully
+- `docx.html` redirects to `index.html`
 
 What to verify by inspecting the generated `.docx` as a ZIP:
 - `word/document.xml` exists and does not contain a `TOC` field instruction
@@ -80,7 +69,7 @@ What to verify by inspecting the generated `.docx` as a ZIP:
 - `word/media/` entries exist when source EPUB contains supported images
 
 Useful pattern:
-1. Export DOCX in Playwright from `docx.html`
+1. Export DOCX in Playwright from `index.html`
 2. Save the download to `/tmp/...`
 3. Open it with Python `zipfile`
 4. Inspect `word/document.xml` and `word/styles.xml`
