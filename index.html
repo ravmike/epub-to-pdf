@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>EPUB → PDF</title>
+<title>EPUB to PDF</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
@@ -12,6 +12,7 @@
   :root {
     --bg: #0e0e10;
     --surface: #18181b;
+    --surface-soft: #111114;
     --border: #27272a;
     --text: #e4e4e7;
     --text-dim: #71717a;
@@ -25,7 +26,7 @@
 
   body {
     font-family: 'JetBrains Mono', monospace;
-    background: var(--bg);
+    background: radial-gradient(circle at top, #16161a 0%, #0e0e10 58%);
     color: var(--text);
     min-height: 100vh;
     display: flex;
@@ -35,11 +36,48 @@
     padding: 2rem;
   }
 
-  .container { width: 100%; max-width: 560px; }
-  header { margin-bottom: 2.5rem; }
+  .container { width: 100%; max-width: 620px; }
+  .modes { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+  .mode-link {
+    text-decoration: none;
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 0.65rem 0.95rem;
+    background: var(--surface-soft);
+    transition: all 0.2s;
+  }
+  .mode-link:hover { color: var(--text); border-color: var(--accent); }
+  .mode-link.current { color: #000; background: var(--accent); border-color: var(--accent); }
+
+  header { margin-bottom: 1.6rem; }
   h1 { font-size: 1.8rem; font-weight: 700; letter-spacing: -0.03em; margin-bottom: 0.4rem; }
   h1 span { color: var(--accent); }
   .subtitle { color: var(--text-dim); font-size: 0.75rem; line-height: 1.6; }
+
+  .notice {
+    margin-bottom: 1.3rem;
+    background: linear-gradient(180deg, rgba(249, 115, 22, 0.08), rgba(24, 24, 27, 0.92));
+    border: 1px solid rgba(249, 115, 22, 0.2);
+    border-radius: 12px;
+    padding: 0.95rem 1rem;
+  }
+  .notice strong {
+    display: block;
+    color: var(--accent);
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-bottom: 0.4rem;
+  }
+  .notice p {
+    color: var(--text-dim);
+    font-size: 0.72rem;
+    line-height: 1.7;
+  }
 
   .drop-zone {
     border: 2px dashed var(--border);
@@ -86,14 +124,28 @@
   .file-info { margin-top: 0.6rem; font-size: 0.7rem; color: var(--text-dim); text-align: center; }
 
   footer { margin-top: 3rem; font-size: 0.65rem; color: var(--text-dim); text-align: center; line-height: 1.6; opacity: 0.6; }
+
+  @media (max-width: 640px) {
+    .settings { grid-template-columns: 1fr; }
+  }
 </style>
 </head>
 <body>
 <div class="container">
+  <div class="modes">
+    <a class="mode-link current" href="./index.html">PDF converter</a>
+    <a class="mode-link" href="./docx.html">DOCX for ElevenReader</a>
+  </div>
+
   <header>
     <h1>EPUB <span>→</span> PDF</h1>
     <p class="subtitle">Client-side converter · full Unicode · nothing leaves your browser</p>
   </header>
+
+  <div class="notice">
+    <strong>Reader compatibility note</strong>
+    <p>If your target app parses PDFs badly, use the new DOCX flow instead. The DOCX page keeps document structure closer to the EPUB and avoids print-oriented pagination choices.</p>
+  </div>
 
   <div class="drop-zone" id="dropZone">
     <span class="drop-icon">📖</span>
@@ -120,217 +172,87 @@
   <footer>JSZip + jsPDF + Noto Sans · zero server calls</footer>
 </div>
 
-<script>
-const { jsPDF } = window.jspdf;
+<script type="module">
+import { parseEpub, toBlocks } from './epub-core.js';
 
-// Google Noto Sans variable font — full Unicode coverage including Cyrillic, Latin-ext, Greek, Vietnamese, etc.
+const { jsPDF } = window.jspdf;
 const FONT_URL = 'https://cdn.jsdelivr.net/gh/google/fonts@main/ofl/notosans/NotoSans%5Bwdth%2Cwght%5D.ttf';
 
-const $ = id => document.getElementById(id);
-let pdfBlob = null, pdfFileName = '', fontCache = null;
+const $ = (id) => document.getElementById(id);
+let pdfBlob = null;
+let pdfFileName = '';
+let fontCache = null;
 
-// --- UI ---
 $('dropZone').addEventListener('click', () => $('fileInput').click());
-$('dropZone').addEventListener('dragover', e => { e.preventDefault(); $('dropZone').classList.add('drag-over'); });
-$('dropZone').addEventListener('dragleave', () => $('dropZone').classList.remove('drag-over'));
-$('dropZone').addEventListener('drop', e => {
-  e.preventDefault(); $('dropZone').classList.remove('drag-over');
-  const f = e.dataTransfer.files[0];
-  if (f?.name.endsWith('.epub')) handleFile(f); else addLog('Drop an .epub file', 'err');
+$('dropZone').addEventListener('dragover', (event) => {
+  event.preventDefault();
+  $('dropZone').classList.add('drag-over');
 });
-$('fileInput').addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+$('dropZone').addEventListener('dragleave', () => $('dropZone').classList.remove('drag-over'));
+$('dropZone').addEventListener('drop', (event) => {
+  event.preventDefault();
+  $('dropZone').classList.remove('drag-over');
+  const file = event.dataTransfer.files[0];
+  if (file?.name.endsWith('.epub')) handleFile(file);
+  else addLog('Drop an .epub file', 'err');
+});
+$('fileInput').addEventListener('change', (event) => {
+  if (event.target.files[0]) handleFile(event.target.files[0]);
+});
 $('downloadBtn').addEventListener('click', () => {
   if (!pdfBlob) return;
   const a = document.createElement('a');
   a.href = URL.createObjectURL(pdfBlob);
-  a.download = pdfFileName; a.click();
+  a.download = pdfFileName;
+  a.click();
   URL.revokeObjectURL(a.href);
 });
 
-function addLog(msg, cls='') {
+function addLog(msg, cls = '') {
   $('log').classList.add('visible');
-  const d = document.createElement('div');
-  if (cls) d.className = cls;
-  d.textContent = new Date().toLocaleTimeString() + ' ' + msg;
-  $('log').appendChild(d);
+  const line = document.createElement('div');
+  if (cls) line.className = cls;
+  line.textContent = new Date().toLocaleTimeString() + ' ' + msg;
+  $('log').appendChild(line);
   $('log').scrollTop = $('log').scrollHeight;
 }
-function setStatus(msg, type='progress') {
+
+function setStatus(msg, type = 'progress') {
   $('status').classList.add('visible');
   $('statusLabel').textContent = msg;
-  $('statusText').className = 'status-text' + (type==='error'?' error':type==='success'?' success':'');
-  $('spinner').style.display = type==='progress'?'block':'none';
+  $('statusText').className = 'status-text' + (type === 'error' ? ' error' : type === 'success' ? ' success' : '');
+  $('spinner').style.display = type === 'progress' ? 'block' : 'none';
 }
-function setProgress(p) { $('progressFill').style.width = p+'%'; }
 
-// --- Font ---
+function setProgress(value) {
+  $('progressFill').style.width = value + '%';
+}
+
 async function loadFont() {
   if (fontCache) return fontCache;
   addLog('Downloading Noto Sans (full Unicode)…');
-  const r = await fetch(FONT_URL);
-  if (!r.ok) throw new Error('Font download failed: ' + r.status);
-  fontCache = await r.arrayBuffer();
-  addLog(`Font: ${(fontCache.byteLength/1048576).toFixed(1)} MB loaded`, 'ok');
+  const response = await fetch(FONT_URL);
+  if (!response.ok) throw new Error('Font download failed: ' + response.status);
+  fontCache = await response.arrayBuffer();
+  addLog(`Font: ${(fontCache.byteLength / 1048576).toFixed(1)} MB loaded`, 'ok');
   return fontCache;
 }
 
 function ab2b64(buf) {
   const u8 = new Uint8Array(buf);
   let s = '';
-  for (let i = 0; i < u8.length; i += 8192)
-    s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
+  for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
   return btoa(s);
 }
 
 function registerFont(doc, data) {
-  const b = ab2b64(data);
-  doc.addFileToVFS('NotoSans-Regular.ttf', b);
+  const b64 = ab2b64(data);
+  doc.addFileToVFS('NotoSans-Regular.ttf', b64);
   doc.addFont('NotoSans-Regular.ttf', 'NotoSans', 'normal');
-  doc.addFileToVFS('NotoSans-Bold.ttf', b);
+  doc.addFileToVFS('NotoSans-Bold.ttf', b64);
   doc.addFont('NotoSans-Bold.ttf', 'NotoSans', 'bold');
 }
 
-// --- EPUB ---
-async function parseEpub(buf) {
-  const zip = await JSZip.loadAsync(buf);
-  addLog('EPUB opened');
-
-  const cxml = await zip.file('META-INF/container.xml')?.async('text');
-  if (!cxml) throw new Error('Invalid EPUB: no container.xml');
-  const parser = new DOMParser();
-  const cdoc = parser.parseFromString(cxml, 'application/xml');
-  const opfPath = cdoc.querySelector('rootfile')?.getAttribute('full-path');
-  if (!opfPath) throw new Error('No rootfile in container.xml');
-  const opfDir = opfPath.includes('/') ? opfPath.substring(0, opfPath.lastIndexOf('/')+1) : '';
-  addLog('OPF: ' + opfPath);
-
-  const opfXml = await zip.file(opfPath)?.async('text');
-  if (!opfXml) throw new Error('Cannot read OPF');
-  const opfDoc = parser.parseFromString(opfXml, 'application/xml');
-
-  const titleEl = opfDoc.getElementsByTagNameNS('http://purl.org/dc/elements/1.1/', 'title')[0]
-                || opfDoc.querySelector('metadata title');
-  const bookTitle = titleEl?.textContent?.trim() || 'Untitled';
-  addLog('Title: ' + bookTitle);
-
-  const manifest = {};
-  opfDoc.querySelectorAll('manifest item').forEach(it => {
-    manifest[it.getAttribute('id')] = { href: it.getAttribute('href'), mt: it.getAttribute('media-type') };
-  });
-
-  const spine = [];
-  opfDoc.querySelectorAll('spine itemref').forEach(ref => {
-    const id = ref.getAttribute('idref');
-    if (manifest[id]) spine.push(manifest[id]);
-  });
-  addLog(`Spine: ${spine.length} items`, 'ok');
-  if (!spine.length) throw new Error('Empty spine');
-
-  // images
-  const imgs = {};
-  for (const [,e] of Object.entries(manifest)) {
-    if (!e.mt?.startsWith('image/')) continue;
-    for (const p of [opfDir+e.href, e.href]) {
-      const f = zip.file(p);
-      if (f) {
-        try {
-          const b = await f.async('base64');
-          const uri = `data:${e.mt};base64,${b}`;
-          imgs[e.href] = uri;
-          imgs[e.href.split('/').pop()] = uri;
-        } catch(_){}
-        break;
-      }
-    }
-  }
-
-  const chapters = [];
-  for (const item of spine) {
-    let html = null;
-    for (const p of [opfDir+item.href, item.href]) {
-      const f = zip.file(p);
-      if (f) { html = await f.async('text'); break; }
-    }
-    if (!html) { addLog('Missing: '+item.href, 'warn'); continue; }
-    html = html.replace(/(src\s*=\s*["'])([^"']+)(["'])/gi, (m,a,s,b) => {
-      const c = s.replace(/^(\.\.\/)+/,'').replace(/^\.\//,'');
-      return a + (imgs[c] || imgs[c.split('/').pop()] || s) + b;
-    });
-    chapters.push({ href: item.href, html });
-  }
-  addLog(`${chapters.length} chapters in correct order`, 'ok');
-  return { bookTitle, chapters };
-}
-
-// --- HTML → blocks ---
-function toBlocks(html) {
-  const m = html.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
-  const div = document.createElement('div');
-  div.innerHTML = m ? m[1] : html;
-  const out = [];
-
-  function isChapterTitle(n) {
-    // Only detect headings by explicit chapter/section keywords.
-    // The old <strong>-based heuristic caused massive false-positives (any
-    // bold emphasis, dialog line, or author name was treated as a chapter title).
-    const t = n.textContent.trim();
-    if (t.length < 2 || t.length > 200) return false;
-    return /^(глава|chapter|часть|part|книга|book|раздел|section|пролог|эпилог|prologue|epilogue)\b/i.test(t);
-  }
-
-  (function walk(n) {
-    if (n.nodeType === 3) { const t = n.textContent.replace(/\s+/g,' ').trim(); if (t) out.push({T:'t',text:t}); return; }
-    if (n.nodeType !== 1) return;
-    const tag = n.tagName.toLowerCase();
-    if (['script','style','svg','nav'].includes(tag)) return;
-    if (/^h[1-6]$/.test(tag)) { const t=n.textContent.trim(); if(t) out.push({T:'h',lv:+tag[1],text:t}); return; }
-    if (tag==='br') { out.push({T:'br'}); return; }
-    if (tag==='hr') { out.push({T:'hr'}); return; }
-    if (tag==='img') { const s=n.getAttribute('src')||''; if(s.startsWith('data:image')) out.push({T:'img',src:s}); return; }
-    if (tag==='p') {
-      // Empty-line paragraph (FB2→EPUB pattern)
-      if (n.classList.contains('empty-line') || n.textContent.trim() === '') {
-        out.push({T:'br'});
-        return;
-      }
-      // Extract images first
-      n.querySelectorAll('img').forEach(i=>{ const s=i.getAttribute('src')||''; if(s.startsWith('data:image')) out.push({T:'img',src:s}); });
-      const t = n.textContent.trim();
-      if (!t) return;
-      // Chapter title detection
-      if (isChapterTitle(n)) {
-        out.push({T:'h', lv:1, text:t});
-        return;
-      }
-      // Sub-walk to preserve <br> line breaks inside the paragraph
-      const segs = [];
-      (function pw(pn) {
-        if (pn.nodeType===3) { segs.push(pn.textContent.replace(/\s+/g,' ')); return; }
-        if (pn.nodeType!==1) return;
-        if (pn.tagName==='BR') { segs.push('\n'); return; }
-        for (const c of pn.childNodes) pw(c);
-      })(n);
-      const parts = segs.join('').split('\n');
-      for (let i=0; i<parts.length; i++) {
-        const s = parts[i].trim();
-        if (s) out.push({T:'p', text:s});
-        if (i < parts.length-1) out.push({T:'br'});
-      }
-      return;
-    }
-    if (['blockquote','li','figcaption','td','th','dt','dd','address','pre'].includes(tag)) {
-      n.querySelectorAll('img').forEach(i=>{ const s=i.getAttribute('src')||''; if(s.startsWith('data:image')) out.push({T:'img',src:s}); });
-      const t=n.textContent.trim();
-      if(t) out.push({T:'p',text:(tag==='li'?'• ':'')+t});
-      return;
-    }
-    // Container elements (div, span, section, article, body) — recurse into children
-    for (const c of n.childNodes) walk(c);
-  })(div);
-  return out;
-}
-
-// --- Convert ---
 async function handleFile(file) {
   pdfBlob = null;
   $('result').classList.remove('visible');
@@ -338,133 +260,140 @@ async function handleFile(file) {
   $('log').classList.remove('visible');
   setProgress(0);
 
-  pdfFileName = file.name.replace(/\.epub$/i,'') + '.pdf';
+  pdfFileName = file.name.replace(/\.epub$/i, '') + '.pdf';
 
   try {
-    addLog(`File: ${file.name} (${(file.size/1048576).toFixed(2)} MB)`);
+    addLog(`File: ${file.name} (${(file.size / 1048576).toFixed(2)} MB)`);
 
-    setStatus('Loading font…'); setProgress(5);
+    setStatus('Loading font…');
+    setProgress(5);
     const fontData = await loadFont();
     setProgress(12);
 
     setStatus('Reading EPUB…');
-    const abuf = await file.arrayBuffer();
+    const buffer = await file.arrayBuffer();
     setProgress(18);
 
     setStatus('Parsing structure…');
-    const epub = await parseEpub(abuf);
+    const epub = await parseEpub(buffer, {
+      log: (msg) => addLog(msg, msg.startsWith('Missing:') ? 'warn' : ''),
+    });
     setProgress(30);
 
     setStatus('Preparing PDF…');
-    const pgKey = $('pageSize').value;
-    const fSize = parseInt($('fontSize').value)||11;
-    const mgn = parseInt($('pageMargin').value)||20;
-    const lh = parseFloat($('lineHeight').value)||1.6;
-    const sizes = {a4:[210,297],a5:[148,210],letter:[215.9,279.4]};
-    const [pw,ph] = sizes[pgKey]||sizes.a4;
-    const uw = pw-mgn*2, uh = ph-mgn*2;
+    const pageKey = $('pageSize').value;
+    const fontSize = parseInt($('fontSize').value, 10) || 11;
+    const margin = parseInt($('pageMargin').value, 10) || 20;
+    const lineHeight = parseFloat($('lineHeight').value) || 1.6;
+    const sizes = { a4: [210, 297], a5: [148, 210], letter: [215.9, 279.4] };
+    const [pageWidth, pageHeight] = sizes[pageKey] || sizes.a4;
+    const usableWidth = pageWidth - margin * 2;
+    const usableHeight = pageHeight - margin * 2;
     const pt2mm = 0.3528;
 
-    const doc = new jsPDF({unit:'mm',format:[pw,ph]});
+    const doc = new jsPDF({ unit: 'mm', format: [pageWidth, pageHeight] });
     registerFont(doc, fontData);
-    doc.setFont('NotoSans','normal');
+    doc.setFont('NotoSans', 'normal');
     addLog('Font registered', 'ok');
     setProgress(35);
 
-    // title page
-    doc.setFontSize(22); doc.setFont('NotoSans','bold');
-    const tl = doc.splitTextToSize(epub.bookTitle, uw*0.8);
-    doc.text(tl, pw/2, ph/2 - tl.length*22*pt2mm*0.7, {align:'center'});
-    doc.setFont('NotoSans','normal'); doc.setFontSize(fSize);
+    doc.setFontSize(22);
+    doc.setFont('NotoSans', 'bold');
+    const titleLines = doc.splitTextToSize(epub.bookTitle, usableWidth * 0.8);
+    doc.text(titleLines, pageWidth / 2, pageHeight / 2 - titleLines.length * 22 * pt2mm * 0.7, { align: 'center' });
+    doc.setFont('NotoSans', 'normal');
+    doc.setFontSize(fontSize);
 
-    let cy = mgn;
-    const np = () => { doc.addPage([pw,ph]); cy=mgn; };
-    const indent = 7; // first-line indent in mm for paragraphs
-    const outlineItems = []; // for PDF outline/bookmarks
+    let cy = margin;
+    const nextPage = () => {
+      doc.addPage([pageWidth, pageHeight]);
+      cy = margin;
+    };
+    const indent = 7;
+    const outlineItems = [];
+    let startedContent = false;
 
-    function wr(text, bold=false, fs=fSize, after=0, firstIndent=0) {
-      doc.setFontSize(fs);
-      doc.setFont('NotoSans', bold?'bold':'normal');
-      const lhm = fs*pt2mm*lh;
-      const lines = doc.splitTextToSize(text, uw - firstIndent);
-      for (let li=0; li<lines.length; li++) {
-        if (cy+lhm > ph-mgn) np();
-        const x = mgn + (li===0 ? firstIndent : 0);
-        doc.text(lines[li], x, cy);
-        cy += lhm;
+    function writeText(text, bold = false, size = fontSize, after = 0, firstIndent = 0) {
+      doc.setFontSize(size);
+      doc.setFont('NotoSans', bold ? 'bold' : 'normal');
+      const lineHeightMm = size * pt2mm * lineHeight;
+      const lines = doc.splitTextToSize(text, usableWidth - firstIndent);
+      for (let i = 0; i < lines.length; i += 1) {
+        if (cy + lineHeightMm > pageHeight - margin) nextPage();
+        const x = margin + (i === 0 ? firstIndent : 0);
+        doc.text(lines[i], x, cy);
+        cy += lineHeightMm;
       }
       cy += after;
     }
 
-    for (let ci=0; ci<epub.chapters.length; ci++) {
-      const blocks = toBlocks(epub.chapters[ci].html);
+    for (let chapterIndex = 0; chapterIndex < epub.chapters.length; chapterIndex += 1) {
+      const blocks = toBlocks(epub.chapters[chapterIndex].html);
       if (!blocks.length) continue;
-      np();
-      const lhm = fSize*pt2mm*lh;
+      if (!startedContent) {
+        nextPage();
+        startedContent = true;
+      }
 
-      for (const b of blocks) {
-        if (b.T==='h') {
-          const major = b.lv <= 2;
-          if (major) {
-            // h1/h2: chapter-level break — start on a fresh page
-            if (cy > mgn + lhm) np();
-          } else {
-            // h3–h6: in-page section header — just add some breathing room
-            cy += lhm * 0.6;
-            if (cy + lhm * 3 > ph - mgn) np();
-          }
-          const hs = b.lv === 1 ? Math.round(fSize * 1.5)
-                   : b.lv === 2 ? Math.round(fSize * 1.3)
-                   : Math.round(fSize * 1.15);
-          const hsLhm = hs * pt2mm * lh;
-          if (major) cy += hsLhm * 0.8; // top padding for chapter headings
-          outlineItems.push({title: b.text, page: doc.internal.getNumberOfPages()});
-          wr(b.text, true, hs, hsLhm * 0.5);
-        } else if (b.T==='p') {
-          wr(b.text, false, fSize, lhm*0.3, indent);
-        } else if (b.T==='t') {
-          // Raw text node (direct child of container, not inside <p>) — no indent
-          wr(b.text, false, fSize, lhm*0.1, 0);
-        } else if (b.T==='br') {
-          cy += lhm*0.6;
-        } else if (b.T==='hr') {
-          cy += lhm*0.3;
-          if (cy+2>ph-mgn) np();
-          doc.setDrawColor(160); doc.setLineWidth(0.3);
-          doc.line(mgn+uw*0.2, cy, pw-mgn-uw*0.2, cy);
-          cy += lhm*0.5;
-        } else if (b.T==='img') {
+      const lineHeightMm = fontSize * pt2mm * lineHeight;
+      for (const block of blocks) {
+        if (block.T === 'h') {
+          const headingSize = block.lv === 1 ? Math.round(fontSize * 1.5)
+            : block.lv === 2 ? Math.round(fontSize * 1.3)
+            : Math.round(fontSize * 1.15);
+          const headingHeight = headingSize * pt2mm * lineHeight;
+          cy += headingHeight * 0.35;
+          if (cy + headingHeight * 2 > pageHeight - margin) nextPage();
+          outlineItems.push({ title: block.text, page: doc.internal.getNumberOfPages() });
+          writeText(block.text, true, headingSize, headingHeight * 0.4);
+        } else if (block.T === 'p') {
+          writeText(block.text, false, fontSize, lineHeightMm * 0.3, indent);
+        } else if (block.T === 't') {
+          writeText(block.text, false, fontSize, lineHeightMm * 0.15, 0);
+        } else if (block.T === 'br') {
+          cy += lineHeightMm * 0.6;
+        } else if (block.T === 'hr') {
+          cy += lineHeightMm * 0.25;
+          if (cy + 2 > pageHeight - margin) nextPage();
+          doc.setDrawColor(160);
+          doc.setLineWidth(0.3);
+          doc.line(margin + usableWidth * 0.2, cy, pageWidth - margin - usableWidth * 0.2, cy);
+          cy += lineHeightMm * 0.45;
+        } else if (block.T === 'img') {
           try {
-            const ip = doc.getImageProperties(b.src);
-            let iw = Math.min(uw*0.9, ip.width*0.264583);
-            let ih = iw*(ip.height/ip.width);
-            if (ih>uh*0.55) { ih=uh*0.55; iw=ih*(ip.width/ip.height); }
-            if (cy+ih>ph-mgn) np();
-            doc.addImage(b.src, mgn+(uw-iw)/2, cy, iw, ih);
-            cy += ih+lhm*0.5;
-          } catch(_){}
+            const props = doc.getImageProperties(block.src);
+            let imgWidth = Math.min(usableWidth * 0.9, props.width * 0.264583);
+            let imgHeight = imgWidth * (props.height / props.width);
+            if (imgHeight > usableHeight * 0.55) {
+              imgHeight = usableHeight * 0.55;
+              imgWidth = imgHeight * (props.width / props.height);
+            }
+            if (cy + imgHeight > pageHeight - margin) nextPage();
+            doc.addImage(block.src, margin + (usableWidth - imgWidth) / 2, cy, imgWidth, imgHeight);
+            cy += imgHeight + lineHeightMm * 0.5;
+          } catch (_) {
+            addLog('Skipped one image that jsPDF could not decode', 'warn');
+          }
         }
       }
 
-      setProgress(35+Math.round(ci/epub.chapters.length*60));
-      setStatus(`Chapter ${ci+1} / ${epub.chapters.length}…`);
-      if (ci%2===0) await new Promise(r=>setTimeout(r,0));
+      setProgress(35 + Math.round(((chapterIndex + 1) / epub.chapters.length) * 60));
+      setStatus(`Section ${chapterIndex + 1} / ${epub.chapters.length}…`);
+      if (chapterIndex % 2 === 0) await new Promise((resolve) => setTimeout(resolve, 0));
     }
 
-    // Add PDF outline (bookmarks) for navigation
     if (outlineItems.length) {
       addLog(`Adding ${outlineItems.length} outline entries…`);
-      for (const item of outlineItems) {
-        doc.outline.add(null, item.title, {pageNumber: item.page});
-      }
+      for (const item of outlineItems) doc.outline.add(null, item.title, { pageNumber: item.page });
       addLog('Outline added', 'ok');
     }
 
-    setProgress(97); setStatus('Generating PDF…');
-    await new Promise(r=>setTimeout(r,30));
+    setProgress(97);
+    setStatus('Generating PDF…');
+    await new Promise((resolve) => setTimeout(resolve, 30));
 
     pdfBlob = doc.output('blob');
-    const mb = (pdfBlob.size/1048576).toFixed(2);
+    const mb = (pdfBlob.size / 1048576).toFixed(2);
     const pages = doc.internal.getNumberOfPages();
 
     setProgress(100);
@@ -472,9 +401,8 @@ async function handleFile(file) {
     addLog(`PDF: ${pages} pages, ${mb} MB`, 'ok');
     $('fileInfo').textContent = `${pdfFileName} · ${pages} pages · ${mb} MB`;
     $('result').classList.add('visible');
-
-  } catch(err) {
-    setStatus('Error: '+err.message, 'error');
+  } catch (err) {
+    setStatus('Error: ' + err.message, 'error');
     addLog(err.message, 'err');
     console.error(err);
   }
